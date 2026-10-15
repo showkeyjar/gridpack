@@ -8,13 +8,17 @@
 判定是**精确**的，不做任何近似：
 
 * float32 非零值可写成 ``v = sig * 2**(exp-150)``，``sig`` 是 24 位有效数（正规数为
-  ``mant | 0x800000``，次正规数为 ``mant``，此时指数固定为 -149）。
+  ``mant | 0x800000``，次正规数为 ``mant``，此时指数固定为 -149）。注意 ``exp`` 必须
+  先掩掉符号位（``(u >> 23) & 0xFF``），否则负值的指数会被多算 256。
 * ``v`` 是 ``2**E`` 的整数倍 ⟺ ``tz(sig) + exp - 150 >= E``（``tz`` 为二进制尾零个数）。
 * 因此全体取值可用的**最大**格点指数就是 ``E_max = min(tz(sig) + exp - 150)``。
 
 取 ``E = E_max`` 是精确无损的；取更小的 ``E`` 同样无损（只是整数更大）。本模块在返回
-``E`` 之前还会验证改写后的整数能安全放进 int32（给后续 zig-zag 与预测留足余量），
-否则返回 ``None``，由调用方回退到保序映射路径。
+``E`` 之前还会做两道闸门：整数必须能安全放进 int32（给 zig-zag 与一阶差分留余量），
+并且会**逐块回代验证** ``v / 2**E`` 确实是整数；任一不满足就返回 ``None``，
+由调用方回退到保序映射路径。
+
+内存：按 ``block``（默认 400 万个值）分块统计，峰值与整个数组大小无关。
 
 负零（``-0.0``）与正零位型不同而整数表示无法区分，故单独用稀疏位图记录，
 保证解码后**逐位一致**。
@@ -26,7 +30,7 @@ import zlib
 
 import numpy as np
 
-__all__ = ["detect_lattice", "lattice_encode", "lattice_decode",
+__all__ = ["detect_lattice", "verify_lattice", "lattice_encode", "lattice_decode",
            "negative_zero_mask", "restore_negative_zero", "INT_WIDTH"]
 
 # 格点整数一律用 int32 承载（动态范围已由 detect_lattice 限定在 2**29 以内）
@@ -36,6 +40,9 @@ UINT_DTYPE = np.dtype("u4")
 
 # 整数绝对值上限：给 zig-zag（翻倍）与一阶差分（再翻倍）留出余量
 _K_LIMIT = 2.0 ** 29
+
+# 分块大小（元素个数）。400 万 int64 约 32 MB，避免大文件上出现 GB 级瞬时峰值。
+BLOCK = 4_000_000
 
 
 def _trailing_zeros(x: np.ndarray, nbits: int) -> np.ndarray:
@@ -55,40 +62,74 @@ def _trailing_zeros(x: np.ndarray, nbits: int) -> np.ndarray:
     return n
 
 
-def detect_lattice(a: np.ndarray):
+def _block_exp(part: np.ndarray) -> int:
+    """单个子块（全为非零有限值）的 min(tz(sig) + base)。"""
+    if part.dtype == np.float32:
+        u = part.view(np.uint32)
+        exp = ((u >> np.uint32(23)) & np.uint32(0xFF)).astype(np.int32)
+        mant = (u & np.uint32(0x7FFFFF)).astype(np.int32)
+        sig = np.where(exp == 0, mant, mant | np.int32(0x800000)).astype(np.int32)
+        base = np.where(exp == 0, np.int32(-149), exp - np.int32(150)).astype(np.int32)
+        nbits = 24
+    else:
+        u = part.view(np.uint64)
+        exp = ((u >> np.uint64(52)) & np.uint64(0x7FF)).astype(np.int64)
+        mant = (u & np.uint64(0xFFFFFFFFFFFFF)).astype(np.int64)
+        sig = np.where(exp == 0, mant, mant | np.int64(1 << 52))
+        base = np.where(exp == 0, np.int64(-1074), exp - np.int64(1075)).astype(np.int64)
+        nbits = 53
+    return int((_trailing_zeros(sig, nbits) + base).min())
+
+
+def verify_lattice(flat: np.ndarray, e: int, block: int = BLOCK) -> bool:
+    """逐块确认每个值都精确等于整数 k * 2**e（2 的幂缩放本身无舍入误差）。
+
+    这是防止"指数算大、静默丢精度"这类错误的最后一道闸门。
+    """
+    scale = float(2.0 ** (-e))
+    for s in range(0, flat.size, block):
+        p = flat[s:s + block].astype(np.float64) * scale
+        if not np.array_equal(np.rint(p), p):
+            return False
+    return True
+
+
+def detect_lattice(a: np.ndarray, block: int = BLOCK, verify: bool = True):
     """返回全体取值共同格点的最大指数 E（int），无法使用格点表示时返回 None。"""
     v = np.ascontiguousarray(a)
     if v.dtype not in (np.float32, np.float64):
         return None
     flat = v.reshape(-1)
-    if flat.size == 0 or not np.isfinite(flat).all():
+    n = flat.size
+    if n == 0:
         return None
-    nz = flat != 0
-    if not nz.any():
+
+    e_best = None
+    maxabs = 0.0
+    for s in range(0, n, block):
+        part = flat[s:s + block]
+        if not np.isfinite(part).all():
+            return None
+        nz = part != 0
+        if not nz.any():
+            continue
+        p = np.ascontiguousarray(part[nz])
+        m = float(np.abs(p).max())
+        if m > maxabs:
+            maxabs = m
+        e = _block_exp(p)
+        e_best = e if e_best is None else min(e_best, e)
+        del p, nz, part
+
+    if e_best is None:
         return None                      # 全零场：整数表示无意义
-    f = flat[nz]
-
-    if v.dtype == np.float32:
-        u = f.view(np.uint32)
-        exp = (u >> np.uint32(23)).astype(np.int64)
-        mant = (u & np.uint32(0x7FFFFF)).astype(np.int64)
-        sig = np.where(exp == 0, mant, mant | 0x800000)
-        base = np.where(exp == 0, -149, exp - 150)
-        nbits = 24
-    else:
-        u = f.view(np.uint64)
-        exp = (u >> np.uint64(52)).astype(np.int64)
-        mant = (u & np.uint64(0xFFFFFFFFFFFFF)).astype(np.int64)
-        sig = np.where(exp == 0, mant, mant | (1 << 52))
-        base = np.where(exp == 0, -1074, exp - 1075)
-        nbits = 53
-
-    e_max = int((_trailing_zeros(sig, nbits) + base).min())
-    if not (-1074 <= e_max <= 40):
+    if not (-1074 <= e_best <= 40):
         return None
-    if float(np.abs(f).max()) / (2.0 ** e_max) > _K_LIMIT:
+    if maxabs / (2.0 ** e_best) > _K_LIMIT:
         return None                      # 整数会溢出 int32，放弃格点路径
-    return e_max
+    if verify and not verify_lattice(flat, e_best, block):
+        return None                      # 回代不通过，宁可退保序映射也不出错
+    return e_best
 
 
 def lattice_encode(a: np.ndarray, e: int) -> np.ndarray:

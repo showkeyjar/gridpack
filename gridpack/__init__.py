@@ -23,15 +23,15 @@ from . import codec, container, entropy, lattice, netcdf_io
 from .codec import (CODEC_VERSION, MODES, candidate_modes, decode_array, decode_bytes,
                     detect_lattice_e, encode_array, encode_bytes)
 from .entropy import METHODS as ENTROPY_METHODS
-from .lattice import detect_lattice
+from .lattice import detect_lattice, verify_lattice
 from .netcdf_io import compress_file, decompress_file, detect_cadence, verify_file
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "codec", "container", "entropy", "lattice", "netcdf_io",
     "encode_array", "decode_array", "encode_bytes", "decode_bytes",
     "compress_file", "decompress_file", "verify_file", "detect_cadence",
-    "detect_lattice", "detect_lattice_e",
+    "detect_lattice", "detect_lattice_e", "verify_lattice",
     "CODEC_VERSION", "MODES", "candidate_modes", "ENTROPY_METHODS", "__version__",
 ]

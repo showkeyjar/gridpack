@@ -217,7 +217,13 @@ def _encode_block(a: np.ndarray, level: int, threads: int, quant_bits: int,
     src = a.reshape(t, y, x)
 
     if lat_e is _LAZY:
-        lat_e = _lattice.detect_lattice(src) if quant_bits == 0 else None
+        if quant_bits != 0:
+            lat_e = None
+        else:
+            try:
+                lat_e = _lattice.detect_lattice(src)
+            except MemoryError:
+                lat_e = None
 
     if mode == "auto":
         best = None

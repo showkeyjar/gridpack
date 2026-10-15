@@ -135,8 +135,12 @@ def compress_file(src: str, dst: str, level: int = 12, chunk_t: int | None = Non
             d = f[name]
             fc = file_chunk
             if fc is None:
-                fc = _adaptive_chunk(d.shape[-2], d.shape[-1], d.dtype.itemsize) if d.ndim >= 2 \
-                    else max(d.shape[0], 1)
+                if d.ndim >= 2:
+                    fc = _adaptive_chunk(d.shape[-2], d.shape[-1], d.dtype.itemsize)
+                elif d.ndim == 1:
+                    fc = max(d.shape[0], 1)
+                else:
+                    fc = 1
             if d.ndim == 0:
                 slices = [(0, 1)]
             else:
@@ -173,7 +177,7 @@ def compress_file(src: str, dst: str, level: int = 12, chunk_t: int | None = Non
                 if verify and quant_bits == 0:
                     if codec.decode_bytes(blob, arr.shape, arr.dtype) != raw:
                         raise RuntimeError("round-trip mismatch on %s[%d:%d]" % (name, s, e))
-                parts.append({"n": int(arr.shape[0]) if arr.ndim else 0,
+                parts.append({"n": int(arr.shape[0]) if arr.ndim else 1,
                               "raw_nbytes": len(raw),
                               "sha256": container.sha256_bytes(raw)})
                 payloads.append(blob)
@@ -249,7 +253,7 @@ def decompress_file(src: str, dst: str) -> dict:
                     if container.sha256_bytes(raw) != p["sha256"]:
                         raise RuntimeError("checksum mismatch on %s" % e["path"])
                     if ds.ndim == 0:
-                        ds[()] = np.frombuffer(raw, dtype=dt)
+                        ds[()] = np.frombuffer(raw, dtype=dt)[0]
                     else:
                         ds[pos:pos + p["n"]] = np.frombuffer(raw, dtype=dt).reshape(
                             _part_shape(e, p["n"]))
