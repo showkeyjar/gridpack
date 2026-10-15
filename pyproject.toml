@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gridpack"
+version = "0.3.0"
+description = "Lossless compression for gridded scientific data (ERA5 and friends)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "gridpack contributors" }]
+keywords = ["era5", "netcdf", "hdf5", "lossless-compression", "gridded-data", "climate", "meteorology"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: System :: Archiving :: Compression",
+]
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+# h5py is required for the NetCDF/HDF5 file layer; zstandard is the default entropy backend
+io = ["h5py>=3.0"]
+zstd = ["zstandard>=0.18"]
+all = ["h5py>=3.0", "zstandard>=0.18"]
+
+[project.urls]
+Homepage = "https://github.com/"
+
+[project.scripts]
+gridpack = "gridpack.cli:main"
+
+[tool.setuptools]
+packages = ["gridpack"]

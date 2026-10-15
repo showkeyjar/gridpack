@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# codec artefacts / scratch output
+*.gpz
+*.nc
+*.log
+run.log
+
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
