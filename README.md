@@ -42,10 +42,19 @@ sparse bitmask — that is what keeps the lattice path bit-exact.
 ## Install
 
 ```bash
-pip install numpy h5py zstandard      # zstandard is optional but recommended
+pip install gridpack                 # core: numpy + h5py (zstandard optional, recommended)
+pip install "gridpack[xarray]"       # + xarray backend support
 ```
 
-Then put the repo root on `PYTHONPATH`, or `pip install -e .` from the repo root.
+Or from source:
+
+```bash
+git clone https://github.com/showkeyjar/gridpack && cd gridpack
+pip install -e .
+```
+
+Installing the package also registers the xarray backend entry point, so
+`engine="gpz"` works immediately -- see [xarray](#xarray).
 
 ---
 
@@ -110,6 +119,48 @@ gridpack.detect_lattice_e(arr)          # -> -4, or None if no lattice
 `chunk_t=None` encodes the array as a single block. With `chunk_t=N` the array is split
 along axis 0 and each chunk is stored independently, so `decode_array` can rebuild without
 the whole payload in memory.
+
+### xarray
+
+Installing the package registers an xarray backend entry point, so a `.gpz` file opens
+like any other dataset:
+
+```python
+import xarray as xr
+import gridpack                                  # registers backend + accessor
+
+ds = xr.open_dataset("era5_10u.gpz", engine="gpz")
+ds = xr.open_dataset("era5_10u.gpz", engine="gpz",
+                     chunks={"time0": 24})       # dask-backed, lazy chunks
+```
+
+`engine="gpz"` is also selected automatically by `xr.open_dataset("...gpz")`, because the
+backend's `guess_can_open` matches the `.gpz` suffix. Dimensions and coordinates are rebuilt
+from the dimension-scale links stored in the container, and every value is bit-identical to
+the source `.nc`.
+
+xarray has no generic *write* backend interface, so writing goes through the accessor:
+
+```python
+ds.gpz.to_file("out.gpz", level=12, threads=4)    # -> compress_file() stats dict
+ds.gpz.info("out.gpz")                            # -> ratio, per-variable model, ...
+
+gridpack.from_xarray(ds, "out.gpz")               # same, without the accessor
+gridpack.open_xarray("out.gpz")                   # same as xr.open_dataset(..., engine="gpz")
+```
+
+`to_file` writes a temporary netCDF (needs `h5netcdf` or `netCDF4`) and compresses that, then
+removes it. netCDF-internal attributes (`_NCProperties`, `CLASS`, `_Netcdf4Coordinates`, ...)
+are stripped automatically -- if a backend rejects any further reserved name, it is dropped
+and the write is retried.
+
+Verified on the bundled ERA5 subset (120 time steps, 4 variables): all four variables
+round-trip bit-exactly through `engine="gpz"`, and a `ds.isel(time0=slice(0, 6)).gpz.to_file()`
+write-back re-reads bit-exactly at **10.30x**.
+
+```bash
+python tests/test_xarray.py
+```
 
 ---
 
@@ -239,6 +290,13 @@ lattice tags — the exponent and the length of the negative-zero bitmap.
 而保序映射最好只有 5.25×——格点表示带来近一倍收益；熵编码上 `rc1` 比 `zstd` 再小
 **12.6%**，但纯 Python 慢约 15 倍，故生产默认仍用 `zstd`。整文件 475.28 MB → 45.83 MB，
 **10.37×**，耗时 47.6 s，逐字节校验通过。
+
+**xarray 支持**：`pip install gridpack` 后 xarray 后端即注册完成，`.gpz` 可直接
+`xr.open_dataset("x.gpz", engine="gpz")` 打开（`.gpz` 后缀也会被自动识别）；维度与坐标
+从容器里记录的维标关联还原，数值与原始 `.nc` 逐位一致。写回用
+`ds.gpz.to_file("out.gpz", level=12, threads=4)`，也可用 `gridpack.from_xarray(ds, path)`；
+查看某个 `.gpz` 的压缩率与逐变量选中的模型用 `ds.gpz.info(path)`。实测 120 时次 ERA5 子集
+的 4 个变量经 `engine="gpz"` 读出全部逐位通过，写回再读回同样逐位通过（10.30×）。
 
 ---
 

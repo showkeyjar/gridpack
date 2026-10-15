@@ -17,6 +17,12 @@
 
     # 指定熵编码后端
     blob = gridpack.encode_array(arr, mode="dt", entropy="zlib")
+
+装了 xarray 之后还可以当后端用::
+
+    import xarray as xr
+    ds = xr.open_dataset("era5_10u.gpz", engine="gpz")
+    ds.gpz.to_file("out.gpz", level=12)
 """
 
 from . import codec, container, entropy, lattice, netcdf_io
@@ -26,12 +32,24 @@ from .entropy import METHODS as ENTROPY_METHODS
 from .lattice import detect_lattice, verify_lattice
 from .netcdf_io import compress_file, decompress_file, detect_cadence, verify_file
 
-__version__ = "0.3.1"
+try:                                   # 注册 xarray 后端与 ds.gpz 访问器；未装 xarray 时跳过
+    from . import xarray_backend                        # noqa: F401
+    from .xarray_backend import open_dataset as open_xarray
+    from .xarray_backend import to_gpz as from_xarray
+    HAVE_XARRAY = True
+except Exception:                                       # pragma: no cover
+    xarray_backend = None
+    open_xarray = None
+    from_xarray = None
+    HAVE_XARRAY = False
+
+__version__ = "0.4.0"
 
 __all__ = [
     "codec", "container", "entropy", "lattice", "netcdf_io",
     "encode_array", "decode_array", "encode_bytes", "decode_bytes",
     "compress_file", "decompress_file", "verify_file", "detect_cadence",
     "detect_lattice", "detect_lattice_e", "verify_lattice",
+    "open_xarray", "from_xarray", "HAVE_XARRAY",
     "CODEC_VERSION", "MODES", "candidate_modes", "ENTROPY_METHODS", "__version__",
 ]

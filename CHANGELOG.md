@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+xarray backend + pip packaging.
+
+- New `gridpack/xarray_backend.py`: `GpzBackendEntrypoint`, the `ds.gpz` accessor, and the
+  `open_xarray` / `from_xarray` helpers.
+- `pyproject.toml` registers `[project.entry-points."xarray.backends"]`, so
+  `xr.open_dataset(path, engine="gpz")` works right after `pip install gridpack`;
+  `guess_can_open` matches the `.gpz` suffix so the engine can also be auto-selected.
+- Dimension names are resolved from the container's dimension-scale links; when a link is
+  missing, an axis length that uniquely matches a dimension-scale variable is used, and
+  `dimN` is the last resort (no more `dim_0` collisions between `lat` and `lon`).
+- The write path strips netCDF-internal attributes (`_NCProperties`, `CLASS`,
+  `_Netcdf4Coordinates`, ...); any further name the backend rejects is dropped and the
+  write retried.
+- New optional extras `xarray` and `all`, plus `[project.urls]`.
+- New `tests/test_xarray.py` (entry point, bit-exact read, coordinate restoration,
+  accessor write-back, suffix auto-detection).
+- Measured: the 120-step ERA5 subset (4 variables) reads back bit-exactly through
+  `engine="gpz"`, and `ds.gpz.to_file()` re-reads bit-exactly at 10.30x.
+
 ## 0.3.1
 
 Fixes found by a full-scale test over the whole local ERA5 archive

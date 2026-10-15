@@ -16,3 +16,4 @@ venv/
 .idea/
 .vscode/
 .DS_Store
+*.pyc

@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gridpack"
-version = "0.3.1"
+version = "0.4.0"
 description = "Lossless compression for gridded scientific data (ERA5 and friends)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "gridpack contributors" }]
-keywords = ["era5", "netcdf", "hdf5", "lossless-compression", "gridded-data", "climate", "meteorology"]
+keywords = ["era5", "netcdf", "hdf5", "lossless-compression", "gridded-data",
+            "climate", "meteorology", "xarray"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -22,13 +23,24 @@ classifiers = [
 dependencies = ["numpy>=1.21"]
 
 [project.optional-dependencies]
-# h5py is required for the NetCDF/HDF5 file layer; zstandard is the default entropy backend
+# h5py 是 NetCDF/HDF5 文件层的必需依赖；zstandard 是默认熵编码后端
 io = ["h5py>=3.0"]
 zstd = ["zstandard>=0.18"]
-all = ["h5py>=3.0", "zstandard>=0.18"]
+# xarray 插件：读用 entry point，写需要一个 netCDF 写出引擎
+xarray = ["xarray>=2023.1", "h5netcdf>=1.0"]
+all = ["h5py>=3.0", "zstandard>=0.18", "xarray>=2023.1", "h5netcdf>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/showkeyjar/gridpack"
+Source = "https://github.com/showkeyjar/gridpack"
+Issues = "https://github.com/showkeyjar/gridpack/issues"
 
 [project.scripts]
 gridpack = "gridpack.cli:main"
+
+# 注册 xarray 后端，之后可用 xr.open_dataset(path, engine="gpz")
+[project.entry-points."xarray.backends"]
+gpz = "gridpack.xarray_backend:GpzBackendEntrypoint"
 
 [tool.setuptools]
 packages = ["gridpack"]
