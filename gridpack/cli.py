@@ -163,8 +163,8 @@ def main(argv=None):
     b.set_defaults(func=cmd_bench)
 
     args = p.parse_args(argv)
-    args.chunk_t = args.chunk_t or None
-    args.file_chunk = args.file_chunk or None
+    args.chunk_t = getattr(args, "chunk_t", None) or None
+    args.file_chunk = getattr(args, "file_chunk", None) or None
     return args.func(args) or 0
 
 

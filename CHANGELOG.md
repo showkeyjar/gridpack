@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.4
+
+Fix a crash in the `info` and `verify` subcommands. `main()` read `args.chunk_t` and
+`args.file_chunk` unconditionally, but only the `compress` / `decompress` parsers define
+those options -- so every `gridpack info <file>` and `gridpack verify <src> <gpz>` call
+died with `AttributeError: 'Namespace' object has no attribute 'chunk_t'`.
+
+Both reads now go through `getattr(..., None)`, so a subcommand that does not define an
+option is unaffected.
+
+No codec change: `CODEC_VERSION` stays 4, and files written by 0.4.0 / 0.5.x are read
+unchanged.
+
+
 ## 0.5.3
 
 First release built and published from CI. `.github/workflows/publish.yml` runs on a

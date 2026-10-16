@@ -43,7 +43,7 @@ except Exception:                                       # pragma: no cover
     from_xarray = None
     HAVE_XARRAY = False
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 __all__ = [
     "codec", "container", "entropy", "lattice", "netcdf_io",
