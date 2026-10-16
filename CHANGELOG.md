@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.3
+
+First release built and published from CI. `.github/workflows/publish.yml` runs on a
+`v*` tag: it checks the tag against `pyproject.toml`, builds the sdist and wheel,
+`twine check`s them, runs the test suite, and publishes through PyPI Trusted
+Publishing (OIDC, no stored API token).
+
+No library change from 0.5.2. This release exists to validate the pipeline, and to
+ship a CHANGELOG whose top heading matches the published version -- the 0.5.2 sdist
+still carried a `## 0.5.0` heading, because the heading was renamed after that
+distribution had already been built.
+
 ## 0.5.2
 
 First published release. 0.5.0 and 0.5.1 were built but never published -- see
