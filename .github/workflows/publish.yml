@@ -1,0 +1,58 @@
+name: Publish to PyPI
+
+# 只有推 v* 标签才会发布。普通 push 与 PR 都不会触发。
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine
+
+      # 防止标签和包版本对不上（发布出去的版本号不可回收）
+      - name: Verify tag matches pyproject version
+        run: |
+          python -c "import os,tomllib,sys;v=tomllib.load(open('pyproject.toml','rb'))['project']['version'];t=os.environ['GITHUB_REF_NAME'].lstrip('v');print('tag=%s version=%s'%(t,v));sys.exit(1) if t!=v else None"
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Check the distributions
+        run: python -m twine check dist/*
+
+      - name: Run the test suite
+        run: |
+          python -m pip install --upgrade numpy h5py zstandard xarray h5netcdf
+          python tests/test_roundtrip.py
+          python tests/test_xarray.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Trusted Publishing：GitHub 签发 OIDC 令牌，PyPI 校验，无需任何 API token
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
