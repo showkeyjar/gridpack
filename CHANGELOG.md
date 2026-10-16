@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.5.0
+## 0.5.2
+
+First published release. 0.5.0 and 0.5.1 were built but never published -- see
+the note at the end of this section.
 
 Performance release. No format change and no API change: `CODEC_VERSION` is untouched, so
 `.gpz` files written by 0.4.0 still read.
@@ -18,6 +21,10 @@ Performance release. No format change and no API change: `CODEC_VERSION` is unto
   `1 .. 2**20` and on 2 x 10**5 random 32-bit values; the detected exponent on real ERA5
   data is unchanged.
 - The float64 path (`nbits = 53`) keeps the original implementation.
+- **Packaging:** the wheel and sdist are published to PyPI. The build is a
+  hand-assembled zip/tarball (the sandbox cannot run `bdist_wheel`), so the
+  dist-info is copied from the 0.4.0 wheel with `Version` rewritten and the
+  `RECORD` recomputed.
 
 ## 0.4.0
 
